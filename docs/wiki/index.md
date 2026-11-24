@@ -7,7 +7,7 @@ Read this page, then the newest entries at the top of [log.md](log.md) (stop onc
 ## Current status
 
 - 2026-11-24: Product direction decided by the owner in chat (see [decisions.md](decisions.md)).
-- 2026-11-24: Roadmap phases 1–4 built locally: pan/zoom canvas, D1 folder tree and cards, per-folder URLs, owner editor at `/admin` with images/GIFs, notes, link cards, embeds, and files. Nothing is deployed; production refuses `/admin` until Cloudflare Access is configured (phase 5). Run `npm run db:migrate && npm run db:seed && npm run dev`, then open `/admin`.
+- 2026-11-24: Roadmap phases 1–4 built locally: pan/zoom canvas, D1 folder tree and cards, per-folder URLs, owner editor at `/admin` with images/GIFs, notes, link cards, embeds, and files. Live at `https://cave.ilyastorun.site` since 2026-11-24 (empty). `/admin` is behind Cloudflare Access (owner email only). Run `npm run db:migrate && npm run db:seed && npm run dev`, then open `/admin`.
 
 ## Pages
 

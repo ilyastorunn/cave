@@ -4,11 +4,16 @@
   "compatibility_date": "2026-11-20",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Only the custom domain serves the site: a workers.dev or preview URL would
+  // sit outside the Cloudflare Access app (the JWT check still refuses /admin there).
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "cave.ilyastorun.site", "custom_domain": true }],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "ily-cave",
-      // No database_id yet: wrangler provisions the database on first deploy.
+      "database_id": "9f41dcb4-0444-4c27-b47f-89e573811155",
       "migrations_dir": "migrations"
     }
   ],
@@ -17,9 +22,10 @@
     { "binding": "FILES", "bucket_name": "ily-cave-files" }
   ],
   "vars": {
-    // Cloudflare Access (phase 5). Until both are set, /admin and /api/admin
-    // are refused in production. In `npm run dev` they are open.
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
+    // Cloudflare Access app "ily-cave admin" (covers cave.ilyastorun.site/admin and
+    // /api/admin). If either is empty, /admin and /api/admin are refused in
+    // production. In `npm run dev` they are open.
+    "ACCESS_TEAM_DOMAIN": "little-bar-e750.cloudflareaccess.com",
+    "ACCESS_AUD": "98adf2d19869306cac644c128b911cfe79195ebda38abe54d298436067bad3d3"
   }
 }

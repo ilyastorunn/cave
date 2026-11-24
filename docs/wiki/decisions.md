@@ -81,3 +81,9 @@ All entries below come from the owner's answers in chat on 2026-11-24. Status `a
 - Status: accepted (implementation choice; owner may revisit)
 - Decision: A folder card is the folder's only handle on a canvas, so deleting the card deletes the folder subtree and its R2 files, after a confirm dialog.
 - Source: implementation, 2026-11-24 (`deleteItem()` in `src/lib/db.ts`).
+
+## 2026-11-24 — Production address: cave.ilyastorun.site
+
+- Status: accepted
+- Decision: Serve the site on a subdomain of the owner's `ilyastorun.site` zone, so Access can protect only `/admin` and `/api/admin`. The owner asked for "a subdomain"; `cave` was chosen by the agent and can be changed (one `routes` entry in `wrangler.jsonc`).
+- Source: owner, chat 2026-11-24 ("ilyastorun.site domainine sub-domain bağla, admin de çalışsın").

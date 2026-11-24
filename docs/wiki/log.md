@@ -3,6 +3,20 @@
 <!-- Newest first. Log meaningful changes, not mechanical edits. Keep each entry to about 10 lines.
      Past ~50 entries or 64 KB, move older months to archive/log-YYYY-MM.md and link them below. -->
 
+## 2026-11-24 — Phase 5 (part 2): Cloudflare Access
+
+- Work: at the owner's request the agent created the Access app "ily-cave admin" in the dashboard (built-in browser, owner already signed in): destinations `cave.ilyastorun.site/admin` and `/api/admin`, existing "Admin owner" policy (include: owner's email only, checked), 24 h session. Set `ACCESS_TEAM_DOMAIN`/`ACCESS_AUD` in `wrangler.jsonc` and redeployed.
+- Verification: curl against production: `/` 200; `/admin`, `/admin/x`, `/api/admin/upload` and `/admin` with a fake JWT header → 302 to the Access login.
+- Observed signed in (owner's existing Access session in the built-in browser): `/admin` renders the editor; `PATCH /api/admin/items/<unknown id>` → app-level 404, i.e. the Worker accepted the real Access JWT.
+- Not verified: an actual upload/write to production D1/R2 (no content was created).
+
+## 2026-11-24 — Phase 5 (part 1): first production deploy
+
+- Work: deployed to `cave.ilyastorun.site` (owner chose the `ilyastorun.site` zone and approved creating the Worker, D1 and R2). Disabled the adapter's SESSION KV and IMAGES bindings, turned off workers.dev and preview URLs, added meta description/og tags, pinned the D1 id, applied `0001_init.sql` remotely.
+- Files: `astro.config.mjs`, `wrangler.jsonc`, `src/layouts/Base.astro`.
+- Verification: `wrangler deploy` provisioned D1 `ily-cave` and R2 `ily-cave-files`; live checks with curl: `/` 200 with empty root canvas, `/yok` 404, `/admin` and `/api/admin/upload` 403 (Access vars still empty), `/favicon.svg` 200.
+- Pending: Cloudflare Access application (owner, in the Zero Trust dashboard; the wrangler token has no Access scope), then set `ACCESS_TEAM_DOMAIN`/`ACCESS_AUD` and redeploy.
+
 ## 2026-11-24 — Phase 4: notes, links, embeds, files
 
 - Work: note/link/embed/file items; shared HTML renderer for server and editor; embed allowlist (YouTube, Vimeo, Spotify, X, Loom, Figma); server-side unfurl with og:image copied to R2; any-file uploads served as sandboxed downloads (PDF inline); paste URL/text, drop links; N/L shortcuts; tap actions per type.

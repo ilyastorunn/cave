@@ -1,0 +1,10 @@
+---
+import FolderPage from '../../components/FolderPage.astro';
+import { loadFolderPage } from '../../lib/page';
+
+// Owner editor. Guarded by src/middleware.ts (Cloudflare Access in production).
+const data = await loadFolderPage(Astro.params.path);
+if (!data.folder) Astro.response.status = 404;
+---
+
+<FolderPage data={data} base="/admin" edit={true} />

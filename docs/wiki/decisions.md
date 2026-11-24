@@ -61,3 +61,23 @@ All entries below come from the owner's answers in chat on 2026-11-24. Status `a
 - Status: accepted
 - Decision: Work proceeds step by step in the order in [roadmap.md](roadmap.md). Project name stays `ily-cave`.
 - Source: owner, chat 2026-11-24 ("yavaştan", "başlayalım").
+
+## 2026-11-24 — Editor lives at /admin, mirroring public URLs
+
+- Status: accepted (implementation choice within the owner's "edit on the live site" decision)
+- Decision: The editor is the same folder page served at `/admin/<path>`. Write APIs live under `/api/admin/*`. Both are guarded in app code; the Cloudflare Access policy will cover exactly these prefixes.
+- Rationale: one Access rule protects everything writable, public pages stay cacheable and free of editor code, and "Görüntüle" maps 1:1 to the public URL.
+- Source: implementation, 2026-11-24 (`src/middleware.ts`).
+
+## 2026-11-24 — Owner check fails closed
+
+- Status: accepted (implementation choice)
+- Decision: In production, `/admin` and `/api/admin` verify the Access JWT themselves and refuse when `ACCESS_TEAM_DOMAIN` or `ACCESS_AUD` is unset, instead of trusting that Access is in front.
+- Rationale: a deploy before phase 5, a `*.workers.dev` URL, or a mis-scoped Access app must not expose write access.
+- Source: implementation, 2026-11-24 (`src/lib/auth.ts`); verified with a production build (403 without a valid JWT).
+
+## 2026-11-24 — Deleting a folder card deletes the folder
+
+- Status: accepted (implementation choice; owner may revisit)
+- Decision: A folder card is the folder's only handle on a canvas, so deleting the card deletes the folder subtree and its R2 files, after a confirm dialog.
+- Source: implementation, 2026-11-24 (`deleteItem()` in `src/lib/db.ts`).

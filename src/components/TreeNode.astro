@@ -1,14 +1,17 @@
 ---
 import type { FolderNode } from '../lib/db';
+import { href } from '../lib/page';
 
 interface Props {
   node: FolderNode;
   activeId: string;
   openIds: Set<string>;
   depth: number;
+  base: string;
 }
 
-const { node, activeId, openIds, depth } = Astro.props;
+const { node, activeId, openIds, depth, base } = Astro.props;
+const link = href(base, node.path);
 const hasChildren = node.children.length > 0;
 const active = node.id === activeId;
 const pad = `padding-left: ${8 + depth * 14}px`;
@@ -21,16 +24,16 @@ const pad = `padding-left: ${8 + depth * 14}px`;
         <span class="chev" aria-hidden="true">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
         </span>
-        <a href={node.path} aria-current={active ? 'page' : undefined}>{node.name}</a>
+        <a href={link} aria-current={active ? 'page' : undefined}>{node.name}</a>
       </summary>
       {node.children.map((child) => (
-        <Astro.self node={child} activeId={activeId} openIds={openIds} depth={depth + 1} />
+        <Astro.self node={child} activeId={activeId} openIds={openIds} depth={depth + 1} base={base} />
       ))}
     </details>
   ) : (
     <div class:list={['node', { active }]} style={pad}>
       <span class="chev" aria-hidden="true" />
-      <a href={node.path} aria-current={active ? 'page' : undefined}>{node.name}</a>
+      <a href={link} aria-current={active ? 'page' : undefined}>{node.name}</a>
     </div>
   )
 }

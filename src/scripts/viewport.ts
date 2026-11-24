@@ -34,7 +34,8 @@ export class Viewport {
   private pointers = new Map<number, { x: number; y: number }>();
   private pinchStart: { dist: number; scale: number; mid: { x: number; y: number }; vx: number; vy: number } | null =
     null;
-  private spaceDown = false;
+  /** True while space is held: presses pan even over items. */
+  spaceDown = false;
   private raf = 0;
 
   constructor(stage: HTMLElement, world: HTMLElement, initial?: Partial<ViewState>) {

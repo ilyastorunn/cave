@@ -3,6 +3,16 @@
 <!-- Newest first. Log meaningful changes, not mechanical edits. Keep each entry to about 10 lines.
      Past ~50 entries or 64 KB, move older months to archive/log-YYYY-MM.md and link them below. -->
 
+## 2026-11-24 — Phase 3: admin editor, R2 image/GIF uploads
+
+- Work: `/admin/<path>` editor (select, move, 4-corner resize with aspect lock, nudge, z-order, delete), image/GIF upload via toolbar/drop/paste to R2, folder create, public `/files/<key>` serving, owner guard middleware with Access JWT verification.
+- Files: `src/middleware.ts`, `src/lib/{auth,http,page}.ts`, `src/lib/db.ts` (writes), `src/pages/api/admin/**`, `src/pages/files/[...key].ts`, `src/pages/admin/[...path].astro`, `src/components/FolderPage.astro`, `src/scripts/editor.ts`, `wrangler.jsonc` (R2 + vars); `jose` dependency.
+- Decisions: see the three new entries in [decisions.md](decisions.md) (editor at /admin, fail-closed auth, folder-card delete = folder delete).
+- Verification: `astro check` 0 errors. Observed locally: drop-upload of 2+2 PNGs with correct aspect, move, aspect-locked resize, `[`/`]`, persistence after reload, delete removes the R2 object (200→404), folder create (`Çalma listeleri & Notlar` → `calma-listeleri-notlar`) and sidebar update, folder-card delete cascades (subfolder 404, its R2 file 404). curl: foreign/missing Origin 403, `text/html` upload 415. Production build via `astro preview`: `/admin`, `/api/admin/upload`, fake JWT → 403; `/` 200.
+- Found and fixed: concurrent uploads got the same z (read-then-insert race) → z computed inside the INSERT.
+- Not verified: real Access JWT (phase 5), touch editing on a device, paste from the OS clipboard (only drop was exercised), very large GIFs.
+- Follow-ups: phase 4 (URL cards, embeds, notes, files). No undo, no multi-select, no folder rename yet.
+
 ## 2026-11-24 — Phase 2: D1 folders, tree, folder cards
 
 - Work: D1 schema (`folders`, `items`; a folder card is an item); sidebar tree from D1; folder cards on canvas; double-click/double-tap to enter; breadcrumbs; real 404 for unknown paths; per-folder view memory; fit-to-content on first visit.

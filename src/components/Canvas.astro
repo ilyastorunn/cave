@@ -1,5 +1,6 @@
 ---
 import type { FolderNode, FolderTree, Item } from '../lib/db';
+import { href } from '../lib/page';
 import FolderCard from './items/FolderCard.astro';
 
 interface Props {
@@ -8,9 +9,11 @@ interface Props {
   chain: FolderNode[];
   items: Item[];
   counts: Map<string, number>;
+  base: string;
+  edit: boolean;
 }
 
-const { tree, folder, chain, items, counts } = Astro.props;
+const { tree, folder, chain, items, counts, base, edit } = Astro.props;
 
 // Bounding box of all items, used for the initial "fit to content" view.
 const bounds = items.length
@@ -22,27 +25,51 @@ const bounds = items.length
       return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     })()
   : null;
+
+const geom = (i: Item) => ({
+  style: `left:${i.x}px;top:${i.y}px;width:${i.w}px;height:${i.h}px;z-index:${i.z}`,
+  'data-item': i.id,
+  'data-type': i.type,
+  'data-x': i.x,
+  'data-y': i.y,
+  'data-w': i.w,
+  'data-h': i.h,
+  'data-z': i.z,
+});
+const str = (v: unknown) => (typeof v === 'string' ? v : '');
 ---
 
-<main class="stage" id="stage" data-folder-id={folder.id} data-bounds={bounds ? JSON.stringify(bounds) : undefined}>
+<main
+  class="stage"
+  id="stage"
+  data-folder-id={folder.id}
+  data-bounds={bounds ? JSON.stringify(bounds) : undefined}
+  data-edit={edit ? '' : undefined}
+>
   <div class="world" id="world">
     {
       items.map((item) => {
-        const style = `left:${item.x}px;top:${item.y}px;width:${item.w}px;height:${item.h}px;z-index:${item.z}`;
         if (item.type === 'folder' && item.targetFolderId) {
           const target = tree.byId.get(item.targetFolderId);
           if (!target) return null;
           return (
-            <div class="item" data-item={item.id} data-type="folder" style={style}>
-              <FolderCard name={target.name} href={target.path} count={counts.get(target.id) ?? 0} />
+            <div class="item" {...geom(item)} data-name={target.name}>
+              <FolderCard name={target.name} href={href(base, target.path)} count={counts.get(target.id) ?? 0} />
             </div>
           );
         }
-        // Phase 3–4: image, link, embed, note, file renderers.
+        if (item.type === 'image' && str(item.data.key)) {
+          return (
+            <div class="item" {...geom(item)}>
+              <img src={`/files/${str(item.data.key)}`} alt={str(item.data.name)} draggable="false" decoding="async" loading="lazy" />
+            </div>
+          );
+        }
+        // Phase 4: link, embed, note, file renderers.
         return null;
       })
     }
-    {!items.length && <p class="hint">Boş canvas</p>}
+    <p class="hint" hidden={items.length > 0}>{edit ? 'Görsel sürükle-bırak, yapıştır ya da aşağıdan ekle' : 'Boş canvas'}</p>
   </div>
 
   {
@@ -51,7 +78,7 @@ const bounds = items.length
         {chain.map((f, i) =>
           i < chain.length - 1 ? (
             <>
-              <a href={f.path}>{f.name}</a>
+              <a href={href(base, f.path)}>{f.name}</a>
               <span class="sep">/</span>
             </>
           ) : (
@@ -59,6 +86,29 @@ const bounds = items.length
           ),
         )}
       </nav>
+    )
+  }
+
+  {
+    edit && (
+      <div class="toolbar" data-ui>
+        <button id="add-image" title="Görsel / GIF ekle">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/><circle cx="6" cy="6.5" r="1.2" fill="currentColor"/><path d="M2.5 12l3.5-3.5 2.5 2.5 2-2 3 3" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          <span>Görsel</span>
+        </button>
+        <button id="add-folder" title="Klasör ekle">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.8l1.4 1.5h4.8A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7z" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span>Klasör</span>
+        </button>
+        <span class="divider" />
+        <a href={folder.path} title="Herkese açık görünüm">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span>Görüntüle</span>
+        </a>
+        <input id="file-input" type="file" accept="image/*" multiple hidden />
+      </div>
+      <div class="toast" id="toast" data-ui role="status" aria-live="polite" />
+      <div class="drop" id="drop" aria-hidden="true">Bırak</div>
     )
   }
 
@@ -95,10 +145,7 @@ const bounds = items.length
     left: 0;
     transform-origin: 0 0;
     will-change: transform;
-  }
-
-  .item {
-    position: absolute;
+    --inv: 1;
   }
 
   .hint {
@@ -144,9 +191,9 @@ const bounds = items.length
     opacity: 0.5;
   }
 
-  .zoom {
+  .zoom,
+  .toolbar {
     position: absolute;
-    right: 16px;
     bottom: 16px;
     display: flex;
     align-items: center;
@@ -157,6 +204,10 @@ const bounds = items.length
     padding: 3px;
   }
 
+  .zoom {
+    right: 16px;
+  }
+
   .zoom button {
     height: 28px;
     min-width: 28px;
@@ -165,7 +216,8 @@ const bounds = items.length
     color: var(--muted);
   }
 
-  .zoom button:hover {
+  .zoom button:hover,
+  .toolbar :is(button, a):hover {
     background: var(--hover);
     color: var(--text);
   }
@@ -176,6 +228,67 @@ const bounds = items.length
     font-variant-numeric: tabular-nums;
   }
 
+  .toolbar {
+    left: 50%;
+    transform: translateX(-50%);
+    gap: 2px;
+  }
+
+  .toolbar :is(button, a) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .divider {
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+    background: var(--border);
+  }
+
+  .toast {
+    position: absolute;
+    left: 50%;
+    bottom: 64px;
+    transform: translateX(-50%);
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    background: var(--text);
+    color: var(--bg);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+
+  .toast[data-show] {
+    opacity: 1;
+  }
+
+  .drop {
+    position: absolute;
+    inset: 12px;
+    display: grid;
+    place-items: center;
+    border: 2px dashed color-mix(in srgb, var(--text) 30%, transparent);
+    border-radius: 16px;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+
+  .stage[data-dragover] .drop {
+    opacity: 1;
+  }
+
   @media (max-width: 767px) {
     .stage {
       left: 0;
@@ -184,7 +297,60 @@ const bounds = items.length
       left: 60px;
       max-width: calc(100% - 76px);
     }
+    .toolbar span:not(.divider) {
+      display: none;
+    }
   }
+</style>
+
+<style is:global>
+  /* Item styles are global: the editor creates item elements at runtime. */
+  .item {
+    position: absolute;
+  }
+
+  .item[data-type='image'] img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+    -webkit-user-drag: none;
+  }
+
+  .item[data-uploading] {
+    opacity: 0.5;
+  }
+
+  /* Editor */
+  [data-edit] .item {
+    cursor: default;
+  }
+
+  [data-edit] .item[data-selected]::after {
+    content: '';
+    position: absolute;
+    inset: calc(-2px * var(--inv));
+    border: calc(1.5px * var(--inv)) solid #3b82f6;
+    border-radius: calc(4px * var(--inv));
+    pointer-events: none;
+  }
+
+  .handle {
+    position: absolute;
+    width: calc(10px * var(--inv));
+    height: calc(10px * var(--inv));
+    background: #fff;
+    border: calc(1.5px * var(--inv)) solid #3b82f6;
+    border-radius: calc(3px * var(--inv));
+    z-index: 1;
+    transform: translate(-50%, -50%);
+  }
+
+  .handle[data-handle='nw'] { left: 0; top: 0; cursor: nwse-resize; }
+  .handle[data-handle='ne'] { left: 100%; top: 0; cursor: nesw-resize; }
+  .handle[data-handle='sw'] { left: 0; top: 100%; cursor: nesw-resize; }
+  .handle[data-handle='se'] { left: 100%; top: 100%; cursor: nwse-resize; }
 </style>
 
 <script>
@@ -209,6 +375,8 @@ const bounds = items.length
   let saveTimer = 0;
   vp.onChange((s) => {
     level.textContent = `${Math.round(s.scale * 100)}%`;
+    // Lets selection outlines and handles keep a constant on-screen size.
+    world.style.setProperty('--inv', String(1 / s.scale));
     clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => sessionStorage.setItem(key, JSON.stringify(s)), 200);
   });
@@ -217,9 +385,9 @@ const bounds = items.length
   document.getElementById('zoom-out')!.addEventListener('click', () => vp.zoomBy(0.8));
   level.addEventListener('click', () => vp.reset());
 
-  // Folder cards: double-click / double-tap enters. A single click does nothing,
-  // so dragging across a card still pans. Keyboard Enter and modified clicks
-  // (new tab) keep normal link behavior.
+  // Folder cards: double-click / double-tap enters. A single click does nothing
+  // (pans in view mode, selects in edit mode). Keyboard Enter and modified
+  // clicks (new tab) keep normal link behavior.
   stage.addEventListener('click', (e) => {
     const card = (e.target as Element).closest('[data-folder-href]');
     if (!card) return;
@@ -227,8 +395,8 @@ const bounds = items.length
     if (!keyboard && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) e.preventDefault();
   });
 
-  // Pointer capture during pans retargets events to the stage, so find the card
-  // under the pointer ourselves. This also gives double-tap on iOS, which has no dblclick.
+  // Pointer capture retargets events, so find the card under the pointer
+  // ourselves. This also gives double-tap on iOS, which has no dblclick.
   let last: { href: string; t: number; x: number; y: number } | null = null;
   let down: { x: number; y: number } | null = null;
   stage.addEventListener('pointerdown', (e) => (down = { x: e.clientX, y: e.clientY }));
@@ -247,4 +415,8 @@ const bounds = items.length
       last = { href, t: now, x: e.clientX, y: e.clientY };
     }
   });
+
+  if (stage.hasAttribute('data-edit')) {
+    import('../scripts/editor').then(({ initEditor }) => initEditor(vp, stage, world));
+  }
 </script>

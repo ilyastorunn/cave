@@ -1,15 +1,19 @@
 ---
 import type { FolderNode, FolderTree } from '../lib/db';
 import TreeNode from './TreeNode.astro';
+import { href } from '../lib/page';
 
 interface Props {
   tree: FolderTree;
   /** Folder whose canvas is shown; null on the 404 page. */
   current: FolderNode | null;
   chain: FolderNode[];
+  base: string;
+  edit: boolean;
 }
 
-const { tree, current, chain } = Astro.props;
+const { tree, current, chain, base, edit } = Astro.props;
+const home = href(base, '/');
 const activeId = current?.id ?? '';
 // Ancestors of the current folder (and the folder itself) start expanded.
 const openIds = new Set(chain.map((f) => f.id));
@@ -18,14 +22,14 @@ const isRoot = activeId === tree.root.id;
 
 <aside class="sidebar" id="sidebar" data-open="false">
   <header class="brand">
-    <a href="/" class="logo">ily-cave</a>
+    <a href={home} class="logo">ily-cave{edit && <span class="badge">düzenleme</span>}</a>
     <button class="close" id="sidebar-close" aria-label="Paneli kapat">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
     </button>
   </header>
 
   <nav class="tree" aria-label="Klasörler">
-    <a href="/" class:list={['home', { active: isRoot }]} aria-current={isRoot ? 'page' : undefined}>
+    <a href={home} class:list={['home', { active: isRoot }]} aria-current={isRoot ? 'page' : undefined}>
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="3" stroke="currentColor" stroke-width="1.4"/></svg>
       <span>{tree.root.name}</span>
     </a>
@@ -34,7 +38,7 @@ const isRoot = activeId === tree.root.id;
       tree.root.children.length ? (
         <div class="folders">
           {tree.root.children.map((node) => (
-            <TreeNode node={node} activeId={activeId} openIds={openIds} depth={0} />
+            <TreeNode node={node} activeId={activeId} openIds={openIds} depth={0} base={base} />
           ))}
         </div>
       ) : (
@@ -69,8 +73,21 @@ const isRoot = activeId === tree.root.id;
   }
 
   .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-weight: 600;
     letter-spacing: -0.01em;
+  }
+
+  .badge {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    padding: 2px 7px;
+    border-radius: 99px;
+    color: var(--muted);
+    background: var(--hover);
   }
 
   .close {

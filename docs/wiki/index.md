@@ -7,11 +7,11 @@ Read this page, then the newest entries at the top of [log.md](log.md) (stop onc
 ## Current status
 
 - 2026-11-24: Product direction decided by the owner in chat (see [decisions.md](decisions.md)).
-- 2026-11-24: Roadmap phases 1–2 built locally: pan/zoom canvas, D1 folder tree, folder cards, per-folder URLs. Nothing is deployed; no editing UI yet (phase 3). Run `npm run db:migrate && npm run db:seed && npm run dev`.
+- 2026-11-24: Roadmap phases 1–3 built locally: pan/zoom canvas, D1 folder tree and cards, per-folder URLs, owner editor at `/admin` with R2 image/GIF uploads. Nothing is deployed; production refuses `/admin` until Cloudflare Access is configured (phase 5). Run `npm run db:migrate && npm run db:seed && npm run dev`, then open `/admin`.
 
 ## Pages
 
-- [architecture.md](architecture.md) — runtime, D1 data model, routing, canvas engine, dev commands.
+- [architecture.md](architecture.md) — runtime, D1/R2 data model, routing, owner auth, admin API, canvas and editor, dev commands.
 - [product.md](product.md) — what ily-cave is, scope, non-goals, product language.
 - [decisions.md](decisions.md) — dated owner decisions on stack, editing, storage, canvas, auth, look.
 - [roadmap.md](roadmap.md) — the five agreed build phases and what is open.

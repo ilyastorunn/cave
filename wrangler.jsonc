@@ -11,6 +11,15 @@
       // No database_id yet: wrangler provisions the database on first deploy.
       "migrations_dir": "migrations"
     }
-  ]
-  // Phase 3: r2_buckets (FILES).
+  ],
+  "r2_buckets": [
+    // Uploaded images, GIFs and files. Served publicly through /files/<key>.
+    { "binding": "FILES", "bucket_name": "ily-cave-files" }
+  ],
+  "vars": {
+    // Cloudflare Access (phase 5). Until both are set, /admin and /api/admin
+    // are refused in production. In `npm run dev` they are open.
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
+  }
 }

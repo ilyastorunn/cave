@@ -1,0 +1,59 @@
+---
+import Base from '../layouts/Base.astro';
+import Sidebar from './Sidebar.astro';
+import Canvas from './Canvas.astro';
+import type { FolderPageData } from '../lib/page';
+import { href } from '../lib/page';
+
+interface Props {
+  data: FolderPageData;
+  /** '' for the public site, '/admin' for the editor. */
+  base: string;
+  edit: boolean;
+}
+
+const { data, base, edit } = Astro.props;
+const { tree, folder, chain, items, counts } = data;
+
+const name = folder && folder.id !== tree.root.id ? `${folder.name} · ily-cave` : folder ? 'ily-cave' : 'Bulunamadı · ily-cave';
+const title = edit ? `✎ ${name}` : name;
+---
+
+<Base title={title}>
+  <Sidebar tree={tree} current={folder} chain={chain} base={base} edit={edit} />
+  {
+    folder ? (
+      <Canvas tree={tree} folder={folder} chain={chain} items={items} counts={counts} base={base} edit={edit} />
+    ) : (
+      <main class="missing">
+        <p>Bu klasör yok.</p>
+        <a href={href(base, '/')}>Ana canvas'a dön</a>
+      </main>
+    )
+  }
+</Base>
+
+<style>
+  .missing {
+    position: fixed;
+    inset: 0 0 0 var(--sidebar-w);
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 8px;
+    color: var(--muted);
+  }
+  .missing p {
+    margin: 0;
+    color: var(--text);
+  }
+  .missing a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  @media (max-width: 767px) {
+    .missing {
+      left: 0;
+    }
+  }
+</style>

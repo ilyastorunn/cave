@@ -1,0 +1,250 @@
+---
+import type { FolderNode, FolderTree, Item } from '../lib/db';
+import FolderCard from './items/FolderCard.astro';
+
+interface Props {
+  tree: FolderTree;
+  folder: FolderNode;
+  chain: FolderNode[];
+  items: Item[];
+  counts: Map<string, number>;
+}
+
+const { tree, folder, chain, items, counts } = Astro.props;
+
+// Bounding box of all items, used for the initial "fit to content" view.
+const bounds = items.length
+  ? (() => {
+      const x0 = Math.min(...items.map((i) => i.x));
+      const y0 = Math.min(...items.map((i) => i.y));
+      const x1 = Math.max(...items.map((i) => i.x + i.w));
+      const y1 = Math.max(...items.map((i) => i.y + i.h));
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    })()
+  : null;
+---
+
+<main class="stage" id="stage" data-folder-id={folder.id} data-bounds={bounds ? JSON.stringify(bounds) : undefined}>
+  <div class="world" id="world">
+    {
+      items.map((item) => {
+        const style = `left:${item.x}px;top:${item.y}px;width:${item.w}px;height:${item.h}px;z-index:${item.z}`;
+        if (item.type === 'folder' && item.targetFolderId) {
+          const target = tree.byId.get(item.targetFolderId);
+          if (!target) return null;
+          return (
+            <div class="item" data-item={item.id} data-type="folder" style={style}>
+              <FolderCard name={target.name} href={target.path} count={counts.get(target.id) ?? 0} />
+            </div>
+          );
+        }
+        // Phase 3–4: image, link, embed, note, file renderers.
+        return null;
+      })
+    }
+    {!items.length && <p class="hint">Boş canvas</p>}
+  </div>
+
+  {
+    chain.length > 1 && (
+      <nav class="crumbs" data-ui aria-label="Konum">
+        {chain.map((f, i) =>
+          i < chain.length - 1 ? (
+            <>
+              <a href={f.path}>{f.name}</a>
+              <span class="sep">/</span>
+            </>
+          ) : (
+            <span class="here" aria-current="page">{f.name}</span>
+          ),
+        )}
+      </nav>
+    )
+  }
+
+  <div class="zoom" data-ui>
+    <button id="zoom-out" aria-label="Uzaklaştır">−</button>
+    <button id="zoom-level" class="level" aria-label="Yakınlaştırmayı sıfırla" title="100% (0)">100%</button>
+    <button id="zoom-in" aria-label="Yakınlaştır">+</button>
+  </div>
+</main>
+
+<style>
+  .stage {
+    position: fixed;
+    inset: 0 0 0 var(--sidebar-w);
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+    background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.2px);
+  }
+
+  .stage[data-grab] {
+    cursor: grab;
+  }
+
+  .stage[data-panning] {
+    cursor: grabbing;
+  }
+
+  .world {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  .item {
+    position: absolute;
+  }
+
+  .hint {
+    position: absolute;
+    margin: 0;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 0.01em;
+    pointer-events: none;
+  }
+
+  .crumbs {
+    position: absolute;
+    top: 14px;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100% - 32px);
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .crumbs a:hover {
+    color: var(--text);
+  }
+
+  .crumbs .here {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sep {
+    opacity: 0.5;
+  }
+
+  .zoom {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    display: flex;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 3px;
+  }
+
+  .zoom button {
+    height: 28px;
+    min-width: 28px;
+    border-radius: 7px;
+    font-size: 15px;
+    color: var(--muted);
+  }
+
+  .zoom button:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+
+  .zoom .level {
+    min-width: 52px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 767px) {
+    .stage {
+      left: 0;
+    }
+    .crumbs {
+      left: 60px;
+      max-width: calc(100% - 76px);
+    }
+  }
+</style>
+
+<script>
+  import { Viewport, type ViewState } from '../scripts/viewport';
+
+  const stage = document.getElementById('stage')!;
+  const world = document.getElementById('world')!;
+  const level = document.getElementById('zoom-level')!;
+  const key = `view:${stage.dataset.folderId}`;
+
+  const vp = new Viewport(stage, world);
+
+  // Initial view: where you left this folder (this tab), else fit the content.
+  const saved = sessionStorage.getItem(key);
+  if (saved) {
+    vp.set(JSON.parse(saved) as ViewState);
+  } else if (stage.dataset.bounds) {
+    vp.fit(JSON.parse(stage.dataset.bounds));
+  }
+  vp.flush();
+
+  let saveTimer = 0;
+  vp.onChange((s) => {
+    level.textContent = `${Math.round(s.scale * 100)}%`;
+    clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => sessionStorage.setItem(key, JSON.stringify(s)), 200);
+  });
+
+  document.getElementById('zoom-in')!.addEventListener('click', () => vp.zoomBy(1.25));
+  document.getElementById('zoom-out')!.addEventListener('click', () => vp.zoomBy(0.8));
+  level.addEventListener('click', () => vp.reset());
+
+  // Folder cards: double-click / double-tap enters. A single click does nothing,
+  // so dragging across a card still pans. Keyboard Enter and modified clicks
+  // (new tab) keep normal link behavior.
+  stage.addEventListener('click', (e) => {
+    const card = (e.target as Element).closest('[data-folder-href]');
+    if (!card) return;
+    const keyboard = e.detail === 0;
+    if (!keyboard && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) e.preventDefault();
+  });
+
+  // Pointer capture during pans retargets events to the stage, so find the card
+  // under the pointer ourselves. This also gives double-tap on iOS, which has no dblclick.
+  let last: { href: string; t: number; x: number; y: number } | null = null;
+  let down: { x: number; y: number } | null = null;
+  stage.addEventListener('pointerdown', (e) => (down = { x: e.clientX, y: e.clientY }));
+  stage.addEventListener('pointerup', (e) => {
+    const moved = down ? Math.hypot(e.clientX - down.x, e.clientY - down.y) : 0;
+    down = null;
+    if (moved > 6) return (last = null);
+    const card = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-folder-href]');
+    if (!card) return (last = null);
+    const href = card.dataset.folderHref!;
+    const now = performance.now();
+    if (last && last.href === href && now - last.t < 350 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 24) {
+      last = null;
+      window.location.href = href;
+    } else {
+      last = { href, t: now, x: e.clientX, y: e.clientY };
+    }
+  });
+</script>

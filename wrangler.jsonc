@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ily-cave",
+  "compatibility_date": "2026-11-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ily-cave",
+      // No database_id yet: wrangler provisions the database on first deploy.
+      "migrations_dir": "migrations"
+    }
+  ]
+  // Phase 3: r2_buckets (FILES).
+}

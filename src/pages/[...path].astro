@@ -1,0 +1,63 @@
+---
+import Base from '../layouts/Base.astro';
+import Sidebar from '../components/Sidebar.astro';
+import Canvas from '../components/Canvas.astro';
+import { loadTree, resolvePath, ancestors, loadItems, countItems } from '../lib/db';
+
+// Every folder has its own URL: / is the root canvas, /a/b is folder b inside a.
+const segments = (Astro.params.path ?? '').split('/').filter(Boolean).map(decodeURIComponent);
+
+const tree = await loadTree();
+const folder = resolvePath(tree, segments);
+
+let content = null;
+if (folder) {
+  const items = await loadItems(folder.id);
+  const targets = items.flatMap((i) => (i.type === 'folder' && i.targetFolderId ? [i.targetFolderId] : []));
+  const counts = await countItems(targets);
+  content = { items, counts, chain: ancestors(tree, folder) };
+} else {
+  Astro.response.status = 404;
+}
+
+const title = folder && folder.id !== tree.root.id ? `${folder.name} · ily-cave` : folder ? 'ily-cave' : 'Bulunamadı · ily-cave';
+---
+
+<Base title={title}>
+  <Sidebar tree={tree} current={folder} chain={content?.chain ?? []} />
+  {
+    folder && content ? (
+      <Canvas tree={tree} folder={folder} chain={content.chain} items={content.items} counts={content.counts} />
+    ) : (
+      <main class="missing">
+        <p>Bu klasör yok.</p>
+        <a href="/">Ana canvas'a dön</a>
+      </main>
+    )
+  }
+</Base>
+
+<style>
+  .missing {
+    position: fixed;
+    inset: 0 0 0 var(--sidebar-w);
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 8px;
+    color: var(--muted);
+  }
+  .missing p {
+    margin: 0;
+    color: var(--text);
+  }
+  .missing a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  @media (max-width: 767px) {
+    .missing {
+      left: 0;
+    }
+  }
+</style>

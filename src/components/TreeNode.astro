@@ -1,0 +1,89 @@
+---
+import type { FolderNode } from '../lib/db';
+
+interface Props {
+  node: FolderNode;
+  activeId: string;
+  openIds: Set<string>;
+  depth: number;
+}
+
+const { node, activeId, openIds, depth } = Astro.props;
+const hasChildren = node.children.length > 0;
+const active = node.id === activeId;
+const pad = `padding-left: ${8 + depth * 14}px`;
+---
+
+{
+  hasChildren ? (
+    <details class="branch" open={openIds.has(node.id)}>
+      <summary class:list={['node', { active }]} style={pad}>
+        <span class="chev" aria-hidden="true">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </span>
+        <a href={node.path} aria-current={active ? 'page' : undefined}>{node.name}</a>
+      </summary>
+      {node.children.map((child) => (
+        <Astro.self node={child} activeId={activeId} openIds={openIds} depth={depth + 1} />
+      ))}
+    </details>
+  ) : (
+    <div class:list={['node', { active }]} style={pad}>
+      <span class="chev" aria-hidden="true" />
+      <a href={node.path} aria-current={active ? 'page' : undefined}>{node.name}</a>
+    </div>
+  )
+}
+
+<style>
+  .node {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 8px;
+    border-radius: 6px;
+    color: var(--muted);
+    list-style: none;
+  }
+
+  .node::-webkit-details-marker {
+    display: none;
+  }
+
+  .node:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+
+  .node.active {
+    background: var(--active);
+    color: var(--text);
+  }
+
+  .node a {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chev {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: transform 150ms ease;
+  }
+
+  details[open] > summary > .chev {
+    transform: rotate(90deg);
+  }
+
+  summary {
+    cursor: default;
+  }
+</style>

@@ -3,6 +3,15 @@
 <!-- Newest first. Log meaningful changes, not mechanical edits. Keep each entry to about 10 lines.
      Past ~50 entries or 64 KB, move older months to archive/log-YYYY-MM.md and link them below. -->
 
+## 2026-11-24 — Phase 4: notes, links, embeds, files
+
+- Work: note/link/embed/file items; shared HTML renderer for server and editor; embed allowlist (YouTube, Vimeo, Spotify, X, Loom, Figma); server-side unfurl with og:image copied to R2; any-file uploads served as sandboxed downloads (PDF inline); paste URL/text, drop links; N/L shortcuts; tap actions per type.
+- Files: `src/lib/{types,embeds,render,unfurl}.ts`, `src/styles/items.css`, `src/components/Canvas.astro`, `src/scripts/editor.ts`, `src/pages/api/admin/{upload,items/index,items/[id]}.ts`, `src/pages/files/[...key].ts`, `src/lib/db.ts`; removed `src/components/items/FolderCard.astro`.
+- Verification: `astro check` 0 errors, build ok. Observed: pasted YouTube URL → embed, pasted astro.build → link card with title/description/image, pasted text → note, dropped PDF → file card; note double-click edit persisted; view mode tap opens link/file, tap activates embed, outside press deactivates. curl: PDF inline without CSP, HTML upload attachment + sandbox CSP, localhost/127.0.0.1/192.168.x/`javascript:`/`ftp:` links → 400, `text` on an image → 404. `toEmbed` checked against 12 sample URLs.
+- Found and fixed: native lazy iframes never loaded inside the transformed world → IntersectionObserver with `data-src`.
+- Not verified: X/Spotify/Vimeo/Loom/Figma embeds actually rendering (only YouTube observed); real clicks inside an embed (the test tool cannot click transformed iframes); unfurl of sites that block bots.
+- Follow-ups: phase 5 (Cloudflare Access, deploy).
+
 ## 2026-11-24 — Phase 3: admin editor, R2 image/GIF uploads
 
 - Work: `/admin/<path>` editor (select, move, 4-corner resize with aspect lock, nudge, z-order, delete), image/GIF upload via toolbar/drop/paste to R2, folder create, public `/files/<key>` serving, owner guard middleware with Access JWT verification.

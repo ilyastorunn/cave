@@ -1,0 +1,272 @@
+/* Canvas items. Global (not scoped): the editor creates items at runtime. */
+
+.item {
+  position: absolute;
+}
+
+.item[data-uploading] {
+  opacity: 0.5;
+}
+
+/* Image ------------------------------------------------------------------ */
+
+.item[data-type='image'] > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+  -webkit-user-drag: none;
+}
+
+/* Shared card surface ------------------------------------------------------ */
+
+.folder,
+.note,
+.link,
+.file {
+  width: 100%;
+  height: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* Folder ----------------------------------------------------------------- */
+
+.folder {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 16px;
+  -webkit-user-drag: none;
+  transition: border-color 150ms ease;
+}
+
+.folder:hover,
+.link:hover,
+.file:hover {
+  border-color: color-mix(in srgb, var(--text) 22%, var(--border));
+}
+
+.folder-icon {
+  margin-bottom: auto;
+  color: var(--text);
+}
+
+.folder-name {
+  font-weight: 550;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-meta,
+.file-meta,
+.link-host {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Note ------------------------------------------------------------------- */
+
+.note {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, #f5d76e 16%, var(--panel));
+  border-color: color-mix(in srgb, #d9b53c 28%, var(--border));
+}
+
+.note-text {
+  height: 100%;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  line-height: 1.45;
+  outline: none;
+}
+
+.note-text:empty::before {
+  content: 'Not…';
+  color: var(--muted);
+}
+
+.note-text[contenteditable='true'],
+.note-text[contenteditable='plaintext-only'] {
+  overflow: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+/* Link ------------------------------------------------------------------- */
+
+.link {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: border-color 150ms ease;
+}
+
+.link-image {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--hover);
+  border-bottom: 1px solid var(--border);
+}
+
+.link-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+
+.link-body {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px 13px;
+  min-height: 0;
+}
+
+.link:not(.has-image) .link-body {
+  flex: 1;
+  justify-content: center;
+}
+
+.link-title {
+  font-weight: 550;
+  font-size: 14px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.link-desc {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.link-host {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Embed ------------------------------------------------------------------ */
+
+.embed {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--hover);
+  box-shadow: var(--shadow);
+}
+
+.embed iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  /* Inactive embeds let the canvas pan; a click/tap activates them. */
+  pointer-events: none;
+}
+
+.item[data-active] .embed iframe {
+  pointer-events: auto;
+}
+
+.item[data-type='embed']:not([data-active]) {
+  cursor: pointer;
+}
+
+.item[data-active] .embed {
+  outline: 2px solid color-mix(in srgb, var(--text) 25%, transparent);
+  outline-offset: 2px;
+}
+
+/* File ------------------------------------------------------------------- */
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 150ms ease;
+}
+
+.file-badge {
+  flex: none;
+  width: 40px;
+  height: 48px;
+  display: grid;
+  place-items: end center;
+  padding-bottom: 7px;
+  border-radius: 6px;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--hover);
+  border: 1px solid var(--border);
+}
+
+.file-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-name {
+  font-weight: 550;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Editor chrome ------------------------------------------------------------ */
+
+[data-edit] .item[data-selected]::after {
+  content: '';
+  position: absolute;
+  inset: calc(-2px * var(--inv));
+  border: calc(1.5px * var(--inv)) solid #3b82f6;
+  border-radius: calc(4px * var(--inv));
+  pointer-events: none;
+}
+
+.handle {
+  position: absolute;
+  width: calc(10px * var(--inv));
+  height: calc(10px * var(--inv));
+  background: #fff;
+  border: calc(1.5px * var(--inv)) solid #3b82f6;
+  border-radius: calc(3px * var(--inv));
+  z-index: 1;
+  transform: translate(-50%, -50%);
+}
+
+.handle[data-handle='nw'] { left: 0; top: 0; cursor: nwse-resize; }
+.handle[data-handle='ne'] { left: 100%; top: 0; cursor: nesw-resize; }
+.handle[data-handle='sw'] { left: 0; top: 100%; cursor: nesw-resize; }
+.handle[data-handle='se'] { left: 100%; top: 100%; cursor: nwse-resize; }

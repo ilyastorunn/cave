@@ -14,19 +14,8 @@ export interface FolderNode extends Folder {
   children: FolderNode[];
 }
 
-export type ItemType = 'folder' | 'image' | 'link' | 'embed' | 'note' | 'file';
-
-export interface Item {
-  id: string;
-  type: ItemType;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  z: number;
-  targetFolderId: string | null;
-  data: Record<string, unknown>;
-}
+import type { Item, ItemType } from './types';
+export type { Item, ItemType } from './types';
 
 interface FolderRow {
   id: string;
@@ -207,14 +196,23 @@ export interface NewItem {
   data: Record<string, unknown>;
 }
 
-export async function createItem(it: NewItem): Promise<{ id: string; z: number }> {
+/** Inserts an item on top of its folder's stack and returns it as stored. */
+export async function createItem(it: NewItem): Promise<Item> {
   const id = crypto.randomUUID();
   const row = await env.DB.prepare(
     `INSERT INTO items (id, folder_id, type, x, y, w, h, z, data) VALUES (?, ?, ?, ?, ?, ?, ?, ${NEXT_Z}, ?) RETURNING z`,
   )
     .bind(id, it.folderId, it.type, it.x, it.y, it.w, it.h, it.folderId, JSON.stringify(it.data))
     .first<{ z: number }>();
-  return { id, z: row?.z ?? 1 };
+  return { id, type: it.type, x: it.x, y: it.y, w: it.w, h: it.h, z: row?.z ?? 1, targetFolderId: null, data: it.data };
+}
+
+/** Replaces a note's text. Only notes have owner-editable data for now. */
+export async function updateNoteText(id: string, text: string): Promise<boolean> {
+  const res = await env.DB.prepare("UPDATE items SET data = ?, updated_at = unixepoch() WHERE id = ? AND type = 'note'")
+    .bind(JSON.stringify({ text }), id)
+    .run();
+  return res.meta.changes > 0;
 }
 
 export type Geometry = Partial<Pick<Item, 'x' | 'y' | 'w' | 'h' | 'z'>>;
@@ -247,14 +245,13 @@ export async function deleteItem(id: string): Promise<boolean> {
     )
       .bind(item.target_folder_id)
       .all<{ data: string }>();
-    keys = results.map((r) => fileKey(r.data)).filter((k): k is string => !!k);
+    keys = results.flatMap((r) => fileKeys(r.data));
     await env.DB.batch([
       env.DB.prepare('DELETE FROM items WHERE id = ?').bind(id),
       env.DB.prepare('DELETE FROM folders WHERE id = ?').bind(item.target_folder_id),
     ]);
   } else {
-    const k = fileKey(item.data);
-    if (k) keys = [k];
+    keys = fileKeys(item.data);
     await env.DB.prepare('DELETE FROM items WHERE id = ?').bind(id).run();
   }
 
@@ -262,7 +259,8 @@ export async function deleteItem(id: string): Promise<boolean> {
   return true;
 }
 
-function fileKey(data: string): string | null {
-  const k = safeJson(data).key;
-  return typeof k === 'string' ? k : null;
+/** R2 keys an item owns: `key` (image, file) and `image` (link preview). */
+function fileKeys(data: string): string[] {
+  const d = safeJson(data);
+  return [d.key, d.image].filter((k): k is string => typeof k === 'string' && /^[0-9a-f-]{36}\.[a-z0-9]{1,10}$/.test(k));
 }

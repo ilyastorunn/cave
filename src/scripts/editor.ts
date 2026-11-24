@@ -5,10 +5,17 @@
  *  - drag an item: move; drag a corner handle: resize (images keep aspect ratio, Shift frees it)
  *  - arrows: nudge 1px (Shift 10px); ] / [ : bring to front / send to back
  *  - Delete / Backspace: delete (folders ask first: the whole subtree goes)
- *  - images/GIFs: toolbar button, drag-and-drop onto the canvas, or paste
+ *  - files (images/GIFs become image items, anything else a file card):
+ *    toolbar "Yükle", drag-and-drop onto the canvas, or paste
+ *  - links: toolbar "Link" (L), paste a URL, or drop a link; allowlisted
+ *    providers become embeds, everything else an unfurled link card
+ *  - notes: toolbar "Not" (N) or paste plain text; double-click a note to edit
  *  - folder: toolbar button
  */
 import type { Viewport } from './viewport';
+import { renderItem } from '../lib/render';
+import { parseUrl } from '../lib/embeds';
+import type { Item } from '../lib/types';
 
 type Geom = { x: number; y: number; w: number; h: number };
 type Dir = 'nw' | 'ne' | 'sw' | 'se';
@@ -122,6 +129,7 @@ export function initEditor(vp: Viewport, stage: HTMLElement, world: HTMLElement)
     if (e.button !== 0 || vp.spaceDown) return;
     const target = e.target as Element;
     if (target.closest('[data-ui]')) return;
+    if ((target as HTMLElement).isContentEditable) return; // caret placement in a note being edited
     const el = target.closest<HTMLElement>('.item[data-item]');
     if (!el) return select(null); // background press: viewport pans
     if (el.hasAttribute('data-uploading')) return;
@@ -210,6 +218,10 @@ export function initEditor(vp: Viewport, stage: HTMLElement, world: HTMLElement)
     const t = e.target as HTMLElement | null;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     if (e.key === 'Escape') return select(null);
+    if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.key === 'n' || e.key === 'N') return (e.preventDefault(), void addNote(''));
+      if (e.key === 'l' || e.key === 'L') return (e.preventDefault(), promptLink());
+    }
     if (!selected) return;
     const el = selected;
 
@@ -299,24 +311,163 @@ export function initEditor(vp: Viewport, stage: HTMLElement, world: HTMLElement)
     }
   }
 
-  function addImages(files: Iterable<File>, at = center()) {
-    const list = [...files].filter((f) => f.type.startsWith('image/'));
-    if (!list.length) return toast('Sadece görsel ve GIF eklenebilir (şimdilik)');
-    list.forEach((f, i) => addImage(f, { x: at.x + i * 24, y: at.y + i * 24 }));
+  /** Inserts a server-rendered item (from the create API) and selects it. */
+  function insert(item: Item): HTMLElement | null {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = renderItem(item);
+    const el = tpl.content.firstElementChild as HTMLElement | null;
+    if (!el) return null;
+    world.appendChild(el);
+    updateHint();
+    select(el);
+    return el;
   }
 
+  /** Temporary card shown while a slow create (upload, link preview) runs. */
+  function placeholder(at: { x: number; y: number }, label: string, w = 260, h = 76) {
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.dataset.uploading = '';
+    el.innerHTML = '<div class="file"><div class="file-badge">…</div><div class="file-body"><div class="file-name"></div><div class="file-meta">Yükleniyor…</div></div></div>';
+    el.querySelector('.file-name')!.textContent = label;
+    place(el, { x: Math.round(at.x - w / 2), y: Math.round(at.y - h / 2), w, h });
+    setZ(el, Math.max(0, ...zs()) + 1);
+    world.appendChild(el);
+    updateHint();
+    return el;
+  }
+
+  async function upload(file: File): Promise<{ key: string; mime: string; size: number }> {
+    const res = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+      body: file,
+    });
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+    return (await res.json()) as { key: string; mime: string; size: number };
+  }
+
+  async function addFile(file: File, at: { x: number; y: number }) {
+    const ph = placeholder(at, file.name);
+    try {
+      const { key, mime, size } = await upload(file);
+      const item = await api<Item>('POST', '/api/admin/items', {
+        folderId,
+        type: 'file',
+        x: at.x,
+        y: at.y,
+        center: true,
+        data: { key, name: file.name, size, mime },
+      });
+      ph.remove();
+      insert(item);
+    } catch (err) {
+      ph.remove();
+      updateHint();
+      toast(`${file.name} yüklenemedi: ${(err as Error).message}`);
+    }
+  }
+
+  function addFiles(files: Iterable<File>, at = center()) {
+    const list = [...files];
+    list.forEach((f, i) => {
+      const p = { x: at.x + i * 24, y: at.y + i * 24 };
+      // SVG/AVIF etc. are images too; anything the browser can't size still works (300x300 default).
+      if (f.type.startsWith('image/')) addImage(f, p);
+      else addFile(f, p);
+    });
+  }
+
+  // ------------------------------------------------------------------- notes
+
+  async function addNote(text: string, at = center()) {
+    try {
+      const item = await api<Item>('POST', '/api/admin/items', { folderId, type: 'note', x: at.x, y: at.y, center: true, data: { text } });
+      const el = insert(item);
+      if (el && !text) editNote(el);
+    } catch (err) {
+      toast(`Not eklenemedi: ${(err as Error).message}`);
+    }
+  }
+
+  function editNote(el: HTMLElement) {
+    const box = el.querySelector<HTMLElement>('.note-text');
+    if (!box || box.isContentEditable) return;
+    const before = box.innerText;
+    try {
+      box.contentEditable = 'plaintext-only';
+    } catch {
+      box.contentEditable = 'true'; // browsers without plaintext-only
+    }
+    box.focus();
+    const range = document.createRange();
+    range.selectNodeContents(box);
+    range.collapse(false);
+    getSelection()?.removeAllRanges();
+    getSelection()?.addRange(range);
+
+    const done = () => {
+      box.contentEditable = 'false';
+      box.removeEventListener('keydown', onKey);
+      const text = box.innerText.replace(/\n$/, '');
+      box.textContent = text; // drop any markup a 'true' contenteditable may have added
+      if (text !== before) api('PATCH', `/api/admin/items/${el.dataset.item}`, { text }).catch((e) => toast(`Kaydedilemedi: ${e.message}`));
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault();
+        box.blur();
+      }
+    };
+    box.addEventListener('keydown', onKey);
+    box.addEventListener('blur', done, { once: true });
+  }
+
+  stage.addEventListener('note-edit', (e) => editNote((e as CustomEvent<HTMLElement>).detail));
+
+  // ------------------------------------------------------------ links/embeds
+
+  async function addLink(url: URL, at = center()) {
+    const ph = placeholder(at, url.hostname.replace(/^www\./, ''), 320, 112);
+    try {
+      const item = await api<Item>('POST', '/api/admin/items', { folderId, type: 'link', x: at.x, y: at.y, center: true, data: { url: url.href } });
+      ph.remove();
+      insert(item);
+    } catch (err) {
+      ph.remove();
+      updateHint();
+      toast(`Link eklenemedi: ${(err as Error).message}`);
+    }
+  }
+
+  function promptLink() {
+    const raw = prompt('Link (YouTube, Vimeo, Spotify, X, Loom, Figma embed olur)');
+    if (!raw) return;
+    const u = parseUrl(raw);
+    if (!u) return toast('Geçerli bir link değil');
+    addLink(u);
+  }
+
+  // ----------------------------------------------------------------- toolbar
+
   const input = document.getElementById('file-input') as HTMLInputElement;
-  document.getElementById('add-image')!.addEventListener('click', () => input.click());
+  document.getElementById('add-upload')!.addEventListener('click', () => input.click());
   input.addEventListener('change', () => {
-    if (input.files?.length) addImages(input.files);
+    if (input.files?.length) addFiles(input.files);
     input.value = '';
   });
+  document.getElementById('add-note')!.addEventListener('click', () => addNote(''));
+  document.getElementById('add-link')!.addEventListener('click', promptLink);
 
-  // Drag and drop from the desktop.
+  // ------------------------------------------------------------ drop / paste
+
   let dragDepth = 0;
-  const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes('Files');
+  const droppable = (e: DragEvent) => {
+    const t = e.dataTransfer?.types ?? [];
+    return t.includes('Files') || t.includes('text/uri-list');
+  };
   stage.addEventListener('dragenter', (e) => {
-    if (!hasFiles(e)) return;
+    if (!droppable(e)) return;
     dragDepth++;
     stage.dataset.dragover = '';
   });
@@ -327,27 +478,40 @@ export function initEditor(vp: Viewport, stage: HTMLElement, world: HTMLElement)
     }
   });
   stage.addEventListener('dragover', (e) => {
-    if (!hasFiles(e)) return;
+    if (!droppable(e)) return;
     e.preventDefault();
     e.dataTransfer!.dropEffect = 'copy';
   });
   stage.addEventListener('drop', (e) => {
-    if (!hasFiles(e)) return;
+    if (!droppable(e)) return;
     e.preventDefault();
     dragDepth = 0;
     delete stage.dataset.dragover;
     const r = stage.getBoundingClientRect();
-    addImages(e.dataTransfer!.files, vp.toWorld(e.clientX - r.left, e.clientY - r.top));
+    const at = vp.toWorld(e.clientX - r.left, e.clientY - r.top);
+    const dt = e.dataTransfer!;
+    if (dt.files.length) return addFiles(dt.files, at);
+    const url = parseUrl(dt.getData('text/uri-list').split('\n').find((l) => l && !l.startsWith('#')) ?? '');
+    if (url) addLink(url, at);
   });
 
-  // Paste (e.g. a screenshot or a copied image).
+  // Paste: files (screenshots, copied images), a URL → link/embed, other text → note.
   window.addEventListener('paste', (e) => {
     const t = e.target as HTMLElement | null;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName))) return;
-    const files = [...(e.clipboardData?.files ?? [])];
-    if (!files.length) return;
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const files = [...cd.files];
+    if (files.length) {
+      e.preventDefault();
+      return addFiles(files);
+    }
+    const text = cd.getData('text/plain').trim();
+    if (!text) return;
     e.preventDefault();
-    addImages(files);
+    const url = parseUrl(text);
+    if (url && /^https?:\/\//i.test(text)) addLink(url);
+    else addNote(text.slice(0, 10000));
   });
 
   // ----------------------------------------------------------------- folders

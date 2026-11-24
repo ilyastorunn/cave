@@ -17,18 +17,40 @@ Schema: `migrations/0001_init.sql`.
 - `items(id, folder_id, type, x, y, w, h, z, target_folder_id, data)`: everything placed on a canvas, in that folder's world coordinates.
   - `type` is one of `folder | image | link | embed | note | file`.
   - A folder card is an item of type `folder` whose `target_folder_id` is the folder it opens. Its position lives on the item, not on the folder.
-  - `data` is JSON specific to each type. For an image it holds `{ key, mime, name, nw, nh }`, where `key` is the R2 object key `<uuid>.<ext>` and `nw`/`nh` are the natural pixel size.
+  - `data` is JSON specific to each type. The shapes are typed in `src/lib/types.ts`:
+    - image: `{ key, mime, name, nw, nh }`
+    - file: `{ key, name, size, mime }`
+    - note: `{ text }`
+    - link: `{ url, title, description, siteName, image }`, where `image` is an R2 key holding a copy of the og:image
+    - embed: `{ url }`
+  - `key` is always an R2 object key `<uuid>.<ext>`.
   - `z` is assigned inside the INSERT as `MAX(z)+1` for the folder, so concurrent creates never collide.
 - Deleting a folder cascades to its subfolders, its items, and the cards that point to it.
-- Deleting an item through `deleteItem()` also deletes the R2 objects of every removed item, including the whole subtree when a folder card is deleted.
+- Deleting an item through `deleteItem()` also deletes the R2 objects of every removed item (`key` and `image`), including the whole subtree when a folder card is deleted.
+
+## Item rendering (`src/lib/render.ts`, `src/styles/items.css`)
+
+- `renderItem(item, folderInfo?)` returns the HTML string for one `.item`, with geometry kept in `data-x/y/w/h/z`. All values are passed through `esc()`.
+  - The server uses it in `Canvas.astro` through `set:html`.
+  - The editor uses it for items it creates at runtime, so the markup is defined in one place. Item styles are global for the same reason.
+- Embeds use an allowlist in `src/lib/embeds.ts`: YouTube (as youtube-nocookie), Vimeo, Spotify, X/Twitter, Loom, and Figma.
+  - `toEmbed(url)` builds the iframe `src` from the stored URL. A src is never stored or accepted from input.
+  - Iframes are rendered with `data-src`. `Canvas.astro` loads them with an IntersectionObserver whose root is `#stage`, because native `loading="lazy"` never fired for iframes moved into view by the world transform (observed 2026-11-24).
+- Link previews (`src/lib/unfurl.ts`):
+  - The server fetches the page (8 s timeout) and reads `<title>` plus the og:/twitter: meta tags with HTMLRewriter.
+  - The og:image (5 MB max, raster formats only) is copied into R2.
+  - `isPublicUrl()` rejects non-http(s) URLs, credentials in the URL, localhost, `.local`/`.internal` hosts, private IPv4 ranges, and IPv6 literals.
+
 
 ## Files (R2, binding `FILES`)
 
 - Uploads are stored under random keys and served publicly by `src/pages/files/[...key].ts`.
-  - Responses carry `Cache-Control: immutable`, an ETag, and `nosniff`.
-  - SVGs get a sandboxing CSP so they cannot run scripts.
-  - Keys must match `<uuid>.<ext>`; anything else returns 404.
-- Allowed upload types are png, jpeg, gif, webp, avif, and svg. The maximum is 50 MB.
+  - Responses carry `Cache-Control: immutable`, an ETag, `nosniff`, and `Content-Disposition` with the original filename.
+  - Images and PDFs are served inline. Every other type is downloaded as an attachment.
+  - Every type except raster images and PDF also gets `CSP: sandbox`. That covers SVG and HTML, so nothing uploaded can run script on this origin.
+  - PDFs are exempt from the sandbox because Chrome's PDF viewer refuses to render under it.
+- Any file type up to 50 MB is accepted. Image types must be png, jpeg, gif, webp, avif, or svg.
+  - Non-image keys take their extension from the filename (lowercase alphanumeric, up to 10 characters), or `bin` if there isn't one.
 
 ## Routing
 
@@ -50,8 +72,11 @@ Schema: `migrations/0001_init.sql`.
 ## Admin API
 
 - `POST /api/admin/upload`: the request body is the file itself, with `Content-Type` set to its type and an optional `X-Filename`. Returns `{ key, size, mime }`.
-- `POST /api/admin/items`: creates an image item `{ folderId, type:'image', x, y, w, h, data:{ key, ... } }`. Returns `{ id, z }`.
-- `PATCH /api/admin/items/:id`: updates any of `x`, `y`, `w`, `h`, and `z`.
+- `POST /api/admin/items`: creates an item of type `image`, `file`, `note`, or `link` and returns the full `Item`.
+  - `x`/`y` is the top-left corner, or the center when `center: true` is set.
+  - `w`/`h` is optional except for images.
+  - For `link`, an allowlisted URL becomes an `embed`; any other URL is unfurled into a link card.
+- `PATCH /api/admin/items/:id`: updates any of `x`, `y`, `w`, `h`, and `z`, plus `text`. `text` is accepted only for notes; any other item returns 404.
 - `DELETE /api/admin/items/:id`: deletes the item. A folder card takes its whole subtree and the related R2 files with it.
 - `POST /api/admin/folders`: `{ parentId, name, x, y }` creates the folder and its card. The slug is a Turkish-aware `slugify` of the name, deduplicated with `-2`, `-3`, and so on.
 
@@ -65,13 +90,26 @@ Schema: `migrations/0001_init.sql`.
   - A two-finger touch pinch zooms.
   - The `+`, `-`, and `0` keys zoom in, zoom out, and reset.
 - Pans are never started from elements marked `[data-ui]` or `[data-interactive]`. Setting `editable = true` (phase 3) also exempts `[data-item]`, so items can be dragged.
-- Folder cards are `<a href>` links. A single click is suppressed, and a double-click or double-tap (detected from pointerup timing, since iOS has no `dblclick`) navigates. Pressing Enter on the keyboard or a modified click keeps normal link behavior.
+- Taps are handled in `Canvas.astro`, detected on pointerup with no movement. A double-tap is a second tap on the same item within 350 ms, because iOS has no `dblclick`.
+  - View mode:
+    - Tapping a link or file opens it in a new tab.
+    - Tapping an embed activates it, turning its iframe's pointer events on and marking it `data-interactive`.
+    - Double-tapping a folder enters it.
+  - Edit mode:
+    - A tap selects the item.
+    - A double-tap enters a folder, opens a link or file, activates an embed, or edits a note.
+  - A press outside an active embed, or Esc, deactivates it.
+- Folder cards are still `<a href>` links. A plain click on them is suppressed; pressing Enter on the keyboard or a modified click keeps normal link behavior.
 - Editor (`src/scripts/editor.ts`) is dynamically imported only when `#stage[data-edit]` is present:
   - Click selects an item; Esc or clicking empty space deselects. Dragging moves the item.
   - Four corner handles resize. Images keep their aspect ratio unless Shift is held.
   - Arrow keys nudge by 1 px, or 10 px with Shift. Nudges are debounced into one PATCH.
   - `]` and `[` bring to front and send to back. Delete or Backspace removes the item; a folder asks for confirmation first.
-  - Images can be added from the toolbar, by drag-and-drop, or by paste. Each shows an optimistic placeholder during upload, with an initial size of at most 480 px on the long side.
+  - The toolbar has Yükle (images, GIFs, and any other file), Not (or the N key), Link (or the L key), and Klasör.
+  - Drag-and-drop accepts files and links.
+  - Paste accepts files, a URL (becomes a link or embed), or other text (becomes a note).
+  - Images show an optimistic preview while uploading, at most 480 px on the long side. Files and links show a placeholder card.
+  - Double-clicking a note edits it in place (`contenteditable="plaintext-only"`). Esc or ⌘/Ctrl+Enter finishes, and the text is saved on blur.
   - Creating or deleting a folder reloads the page so the sidebar updates.
   - Selection chrome uses `--inv = 1/scale` so it keeps a constant screen size.
 - The initial view restores the last view of that folder from `sessionStorage` (`view:<folderId>`). Otherwise it fits the content at a scale of 1 or less. `flush()` applies it synchronously to avoid a flash.
